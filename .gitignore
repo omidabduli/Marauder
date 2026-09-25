@@ -1,0 +1,23 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache & compiled code
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# IDE configurations
+.vscode/
+.idea/
+
+# Local configuration settings (generated on first run)
+settings.json
+

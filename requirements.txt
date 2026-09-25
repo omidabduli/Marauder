@@ -1,0 +1,15 @@
+# AMP - Availability Management Platform
+#
+# Flask-based web server for team availability management
+#
+# Python version compatibility: 3.7+
+#
+# Installation:
+# pip install -r requirements.txt
+#
+# To run the application:
+# python server.py
+
+Flask==2.3.3
+Flask-CORS==4.0.0
+requests==2.31.0

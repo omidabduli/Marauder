@@ -1,0 +1,731 @@
+<!--
+  MARAUDER - TEAM STATUS MONITOR
+  Written / Maintained by: OA (Omid Abduli)
+
+  The main board. Under server.py it reads and writes users.csv through the API.
+  Opened without the server (for example on GitHub Pages) it runs as a demo:
+  sample team, statuses generated around the current date, edits kept in this browser.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Marauder · Team Status</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141413'/%3E%3Crect x='7' y='13' width='6' height='6' rx='1.5' fill='%237BB287'/%3E%3Ccircle cx='19' cy='16' r='3' fill='%23E3BF55'/%3E%3Cpath d='M25 12.5l3 6h-6z' fill='%23E0675A'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#FAF9F5; --surface:#F0EEE6; --raised:#FFFFFF;
+  --ink:#141413; --ink-2:#3D3D3A; --muted:#6E6C64; --line:#E3DFD3;
+  --clay:#C15F3C; --clay-ink:#A94F2F; --clay-soft:#F4E2D8;
+  --sea:#44697A; --sea-soft:#DDE7EA;
+  --s-green:#4F8A5B; --s-yellow:#D4A72C; --s-orange:#D9772B; --s-red:#B8392B;
+  --serif:"Newsreader","Iowan Old Style","Palatino Linotype",Georgia,serif;
+  --sans:"Instrument Sans","Helvetica Neue",Arial,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#1C1B19; --surface:#252420; --raised:#2B2A26;
+    --ink:#F0EEE6; --ink-2:#D3D0C6; --muted:#A19E94; --line:#3A3833;
+    --clay:#E08A67; --clay-ink:#E9A083; --clay-soft:#3A2A22;
+    --sea:#93B4C2; --sea-soft:#233036;
+    --s-green:#7BB287; --s-yellow:#E3BF55; --s-orange:#E8914D; --s-red:#E0675A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#1C1B19; --surface:#252420; --raised:#2B2A26;
+  --ink:#F0EEE6; --ink-2:#D3D0C6; --muted:#A19E94; --line:#3A3833;
+  --clay:#E08A67; --clay-ink:#E9A083; --clay-soft:#3A2A22;
+  --sea:#93B4C2; --sea-soft:#233036;
+  --s-green:#7BB287; --s-yellow:#E3BF55; --s-orange:#E8914D; --s-red:#E0675A;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.01em;margin:0}
+p{margin:0}
+a{color:inherit}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--clay);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.mono{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+/* Buttons and inputs */
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 16px;border-radius:999px;font-size:14px;font-weight:500;text-decoration:none;border:1px solid var(--line);background:transparent;cursor:pointer;white-space:nowrap;transition:background .2s,border-color .2s,color .2s}
+.btn:hover{background:var(--surface);border-color:var(--ink-2)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.btn.primary:hover{background:var(--clay);border-color:var(--clay)}
+.btn.quiet{border-color:transparent;color:var(--ink-2)}
+.btn.quiet:hover{background:var(--surface);color:var(--ink)}
+.btn:disabled{opacity:.4;cursor:not-allowed;background:transparent}
+.field{height:36px;border:1px solid var(--line);border-radius:12px;background:var(--raised);padding:0 12px;font-size:14px;min-width:0}
+.field:focus{outline:none;border-color:var(--clay);box-shadow:0 0 0 3px var(--clay-soft)}
+select.field{padding-right:28px;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 16px,calc(100% - 10px) 16px;background-size:5px 5px;background-repeat:no-repeat}
+
+/* Status glyphs: shape and colour both carry the meaning */
+.g{display:inline-block;flex:none;width:14px;height:14px}
+.g.green{background:var(--s-green);border-radius:3px}
+.g.yellow{background:var(--s-yellow);border-radius:50%}
+.g.orange{border-radius:3px;background:repeating-linear-gradient(135deg,var(--s-orange) 0 3px,color-mix(in srgb,var(--s-orange) 45%,transparent) 3px 5px)}
+.g.red{width:16px;background:var(--s-red);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.g.unset{width:4px;height:4px;border-radius:50%;background:var(--line)}
+
+/* Top bar */
+.top{flex:none;border-bottom:1px solid var(--line);padding:0 clamp(16px,2.4vw,28px)}
+.top .row{display:flex;align-items:center;gap:10px;min-height:60px;flex-wrap:wrap;padding-block:10px}
+.brand{font-family:var(--serif);font-size:22px;text-decoration:none;margin-right:6px}
+.week{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.demo-tag{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:var(--clay-soft);color:var(--clay-ink)}
+.tools{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.tools select{width:210px}
+.toast{position:fixed;left:50%;top:68px;transform:translate(-50%,-6px);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;max-width:calc(100vw - 32px);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* Summary of the current period */
+.summary{flex:none;padding:18px clamp(16px,2.4vw,28px) 16px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.figs{display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr));align-items:end}
+.figs .lead{margin-right:24px;padding-bottom:4px}
+.fig{position:relative;display:flex;align-items:center;gap:10px;padding:0 20px;border-left:1px solid var(--line);cursor:help;min-width:0}
+.fig b{font-family:var(--serif);font-weight:300;font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
+.fig span{display:block;font-size:13px;color:var(--ink-2);line-height:1.25}
+.fig small{display:block;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.fig[data-tip]:hover::after,.fig[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;top:calc(100% + 10px);left:12px;width:min(300px,80vw);background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;color:var(--ink-2);z-index:30}
+.bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--surface)}
+.bar i{display:block;height:100%;transition:width .4s}
+.bar .green{background:var(--s-green)} .bar .yellow{background:var(--s-yellow)} .bar .orange{background:var(--s-orange)} .bar .red{background:var(--s-red)}
+.overload{font-size:14px;color:var(--ink-2)}
+.overload strong{font-weight:600;color:var(--s-red)}
+
+/* Board */
+.board{flex:1;min-height:0;overflow:auto}
+.grid{display:grid;grid-template-columns:minmax(150px,220px) repeat(var(--n),minmax(56px,1fr));min-width:max-content}
+.c{height:38px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:var(--bg)}
+.c.h{position:sticky;top:0;z-index:3;height:48px;flex-direction:column;gap:1px;font-family:var(--mono);font-size:12px;color:var(--ink-2);background:var(--bg);border-bottom-color:var(--ink-2)}
+.c.h small{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);height:13px}
+.c.h.cur{background:var(--ink);color:var(--bg)}
+.c.h.cur small{color:var(--bg);opacity:.7}
+.c.name{position:sticky;left:0;z-index:2;justify-content:flex-start;padding:0 12px 0 clamp(16px,2.4vw,28px);border-right:1px solid var(--line);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c.h.name{z-index:4;align-items:flex-start;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.c.grp{position:sticky;left:0;z-index:2;justify-content:flex-start;padding:18px 12px 0 clamp(16px,2.4vw,28px);height:44px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom-color:var(--line)}
+.c.grp-fill{height:44px}
+.c.yb{border-left:1px solid var(--ink-2)}
+.c.now{background:color-mix(in srgb,var(--surface) 65%,var(--bg))}
+.cell{width:100%;height:100%;border:0;background:transparent;display:flex;align-items:center;justify-content:center;padding:0;cursor:default}
+.cell.edit{cursor:pointer}
+.cell.edit:hover{background:var(--surface)}
+.cell.edit:hover .g.unset{width:12px;height:12px;border-radius:3px;background:transparent;border:1px dashed var(--muted)}
+.c.sel{background:var(--clay-soft)}
+.c.name.sel{box-shadow:inset 2px 0 0 var(--clay);color:var(--ink);font-weight:500}
+.empty{padding:48px clamp(16px,2.4vw,28px);color:var(--muted)}
+
+/* Dialogs */
+dialog{border:1px solid var(--line);border-radius:20px;background:var(--raised);color:var(--ink);padding:28px;width:min(480px,calc(100vw - 32px));max-height:min(80vh,760px)}
+dialog::backdrop{background:rgba(20,20,19,.35)}
+dialog h2{font-size:28px;line-height:1.15;margin-bottom:20px}
+dialog label{display:grid;gap:6px;font-size:13px;color:var(--ink-2);margin-bottom:14px}
+dialog .field{width:100%;height:40px}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+#faqModal{width:min(680px,calc(100vw - 32px));padding:0}
+#faqModal[open]{display:flex;flex-direction:column}
+#faqModal header{padding:28px 28px 16px;border-bottom:1px solid var(--line)}
+#faqModal header h2{margin-bottom:16px}
+#faqList{overflow:auto;padding:0 28px}
+.qa{padding:18px 0;border-bottom:1px solid var(--line)}
+.qa:last-child{border-bottom:0}
+.qa h3{font-size:19px;line-height:1.3;margin-bottom:6px}
+.qa p{color:var(--ink-2);font-size:14px;max-width:62ch}
+#faqModal footer{padding:14px 28px;border-top:1px solid var(--line);display:flex;justify-content:flex-end}
+
+@media (max-width:760px){
+  .tools{width:100%;margin-left:0;gap:4px}
+  .tools select{flex:1 1 100%;width:auto;margin-bottom:4px}
+  .tools .btn{height:32px;padding:0 11px;font-size:13px}
+  .figs{display:grid;grid-template-columns:repeat(4,1fr)}
+  .figs .lead{grid-column:1 / -1;margin:0 0 10px;display:flex;gap:10px}
+  .fig{padding:0 8px;gap:6px;min-width:0}
+  .fig:first-of-type{border-left:0;padding-left:0}
+  .fig b{font-size:26px}
+  .fig span{display:none}
+  .grid{grid-template-columns:minmax(120px,150px) repeat(var(--n),52px)}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="row">
+    <a class="brand" href="./">Marauder</a>
+    <span class="week" id="badge"></span>
+    <span class="demo-tag" id="demoTag" hidden></span>
+    <div class="tools">
+      <select class="field" id="userSelect" aria-label="Person"></select>
+      <button class="btn" id="editUserBtn" type="button" disabled></button>
+      <button class="btn" id="addUserBtn" type="button"></button>
+      <button class="btn quiet" id="faqBtn" type="button"></button>
+      <a class="btn quiet" id="adminBtn" href="/admin"></a>
+      <button class="btn quiet" id="resetBtn" type="button" hidden></button>
+    </div>
+  </div>
+</header>
+<div class="toast" id="notify" role="status" aria-live="polite"></div>
+
+<section class="summary" aria-label="Current period">
+  <div class="figs" id="figs"></div>
+  <div class="bar" id="bar" aria-hidden="true"></div>
+  <p class="overload" id="overload" hidden></p>
+</section>
+
+<main class="board" id="board">
+  <div class="grid" id="grid" aria-busy="true"></div>
+</main>
+
+<dialog id="addModal">
+  <h2 data-t="addTitle"></h2>
+  <label><span data-t="addName"></span><input class="field" id="newName" autocomplete="off"></label>
+  <label><span data-t="addGroup"></span><select class="field" id="newGroup"></select></label>
+  <div class="actions"><button class="btn" data-close data-t="btnCancel"></button><button class="btn primary" id="addSave" data-t="btnAdd"></button></div>
+</dialog>
+
+<dialog id="editModal">
+  <h2 data-t="editTitle"></h2>
+  <label><span data-t="addName"></span><input class="field" id="editName" autocomplete="off"></label>
+  <label><span data-t="addGroup"></span><select class="field" id="editGroup"></select></label>
+  <div class="actions"><button class="btn" data-close data-t="btnCancel"></button><button class="btn primary" id="editSave" data-t="btnSave"></button></div>
+</dialog>
+
+<dialog id="faqModal">
+  <header>
+    <h2 data-t="faqTitle"></h2>
+    <input class="field" id="faqSearch" type="search" autocomplete="off" style="width:100%;height:40px">
+  </header>
+  <div id="faqList"></div>
+  <footer><button class="btn" data-close data-t="faqClose"></button></footer>
+</dialog>
+
+<script type="module">
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+const STATUS = ['green', 'yellow', 'orange', 'red'];
+const TO_CODE = { green: '1', yellow: '2', orange: '3', red: '4' };
+const FROM_CODE = { '1': 'green', '2': 'yellow', '3': 'orange', '4': 'red' };
+
+const translations = {
+  de: {
+    kw: "KW", now: "aktuell", thisPeriod: "Diese Periode", name: "Name",
+    choosePerson: "Person auswählen", addPersonBtn: "Person hinzufügen", editPersonBtn: "Bearbeiten",
+    greenTooltip: "Alles läuft gut! Ich bin motiviert und habe Luft in meinem Zeitplan. Kommt gerne auf mich zu, wenn ihr Unterstützung oder Hilfe braucht.",
+    yellowTooltip: "Ich bin gut beschäftigt, habe aber alles im Griff. Ich muss mich voll auf meine aktuellen Aufgaben konzentrieren, also sprecht euch bitte mit mir ab, bevor ihr mir Neues zuweist.",
+    orangeTooltip: "Ich spüre den Druck. Ich jongliere mit zu vielen Themen und muss strikt priorisieren. Wahrscheinlich muss ich bald Aufgaben abgeben oder aktiv um Hilfe bitten.",
+    redTooltip: "Ich bin am Limit oder komplett blockiert. Es geht gerade nicht weiter. Ich brauche sofort jemanden aus dem Team oder GF, der einspringt und mir hilft, umzuverteilen oder Aufgaben zu übernehmen.",
+    greenLabel: "Grün", yellowLabel: "Gelb", orangeLabel: "Orange", redLabel: "Rot",
+    overload: "Überlastung:",
+    addTitle: "Neue Person hinzufügen", addName: "Name", addGroup: "Gruppe",
+    btnCancel: "Abbrechen", btnAdd: "Hinzufügen", editTitle: "Person bearbeiten", btnSave: "Speichern",
+    statusSuper: "Super", statusOk: "OK", statusFull: "Voll mit Annahmestopp", statusOverload: "Überlastung",
+    clickToSet: "Klicken zum Setzen", selectToEdit: "Person auswählen zum Bearbeiten",
+    selectPersonFirst: "Bitte erst oben eine Person auswählen",
+    selectThisPersonFirst: "Bitte wählen Sie diese Person aus, um den Status zu ändern",
+    dataNotFound: "Keine Daten gefunden", errorLoading: "Fehler beim Laden der Daten",
+    addedMessage: "wurde hinzugefügt", updatedMessage: "wurde aktualisiert",
+    enterNameWarning: "Bitte geben Sie einen Namen ein", selectGroupWarning: "Bitte wählen Sie eine Gruppe",
+    saveError: "Fehler beim Speichern. Bitte versuchen Sie es erneut.",
+    pastEditDisabled: "Das Bearbeiten vergangener Wochen ist laut Administrator-Einstellungen deaktiviert.",
+    pastLimitExceeded: "Sie können nur bis zu {limit} Wochenpaare in der Vergangenheit bearbeiten.",
+    groupPlaceholder: "Keine Gruppen", adminPanel: "Admin",
+    faqBtnText: "Hilfe", faqTitle: "Hilfe & FAQ", faqSearchPlaceholder: "Fragen oder Begriffe suchen",
+    faqNoResults: "Keine passenden FAQ-Einträge gefunden.", faqClose: "Schließen",
+    demoTag: "Demo", resetDemo: "Zurücksetzen", demoReset: "Demo zurückgesetzt",
+    demoHint: "Demo: Beispielteam mit fiktiven Namen. Änderungen bleiben in diesem Browser."
+  },
+  en: {
+    kw: "CW", now: "now", thisPeriod: "This period", name: "Name",
+    choosePerson: "Select person", addPersonBtn: "Add person", editPersonBtn: "Edit",
+    greenTooltip: "Everything is going well! I am motivated and have availability in my schedule. Feel free to reach out to me if you need support or help.",
+    yellowTooltip: "I am busy but have everything under control. I need to focus fully on my current tasks, so please coordinate with me before assigning new ones.",
+    orangeTooltip: "I am feeling the pressure. I am juggling too many topics and must strictly prioritize. I will probably need to delegate tasks or actively ask for help soon.",
+    redTooltip: "I am at my limit or completely blocked. It cannot go on like this. I need someone from the team or management to step in and help redistribute tasks immediately.",
+    greenLabel: "Green", yellowLabel: "Yellow", orangeLabel: "Orange", redLabel: "Red",
+    overload: "Overloaded:",
+    addTitle: "Add a person", addName: "Name", addGroup: "Group",
+    btnCancel: "Cancel", btnAdd: "Add", editTitle: "Edit person", btnSave: "Save",
+    statusSuper: "Super", statusOk: "OK", statusFull: "Full, no new tasks", statusOverload: "Overloaded",
+    clickToSet: "Click to set", selectToEdit: "Select person to edit",
+    selectPersonFirst: "Select a person at the top first",
+    selectThisPersonFirst: "Select this person to change their status",
+    dataNotFound: "No data found", errorLoading: "Error loading data",
+    addedMessage: "has been added", updatedMessage: "has been updated",
+    enterNameWarning: "Please enter a name", selectGroupWarning: "Please select a group",
+    saveError: "Could not save. Please try again.",
+    pastEditDisabled: "Editing past weeks is disabled in the admin settings.",
+    pastLimitExceeded: "You can only edit up to {limit} past week pairs.",
+    groupPlaceholder: "No groups", adminPanel: "Admin",
+    faqBtnText: "Help", faqTitle: "Help & FAQ", faqSearchPlaceholder: "Search questions or topics",
+    faqNoResults: "No matching FAQ entries found.", faqClose: "Close",
+    demoTag: "Demo", resetDemo: "Reset", demoReset: "Demo reset",
+    demoHint: "Demo: sample team with fictional names. Changes stay in this browser."
+  },
+  fr: {
+    kw: "Sem", now: "actuelle", thisPeriod: "Période actuelle", name: "Nom",
+    choosePerson: "Sélectionner une personne", addPersonBtn: "Ajouter", editPersonBtn: "Modifier",
+    greenTooltip: "Tout va bien ! Je suis motivé(e) et j'ai de la disponibilité. N'hésitez pas à me contacter si vous avez besoin de soutien ou d'aide.",
+    yellowTooltip: "Je suis bien occupé(e) mais je gère. Je dois me concentrer sur mes tâches actuelles, merci de vous coordonner avec moi avant de m'en attribuer de nouvelles.",
+    orangeTooltip: "Je ressens la pression. Je jongle avec trop de sujets et dois prioriser strictement. Je devrai probablement déléguer ou demander de l'aide bientôt.",
+    redTooltip: "Je suis à la limite ou complètement bloqué(e). Cela ne peut plus durer. J'ai besoin que quelqu'un prenne le relais immédiatement pour redistribuer le travail.",
+    greenLabel: "Vert", yellowLabel: "Jaune", orangeLabel: "Orange", redLabel: "Rouge",
+    overload: "Surcharge :",
+    addTitle: "Ajouter une personne", addName: "Nom", addGroup: "Groupe",
+    btnCancel: "Annuler", btnAdd: "Ajouter", editTitle: "Modifier la personne", btnSave: "Enregistrer",
+    statusSuper: "Super", statusOk: "OK", statusFull: "Plein, pas de nouvelles tâches", statusOverload: "Surchargé",
+    clickToSet: "Cliquer pour définir", selectToEdit: "Sélectionner une personne pour modifier",
+    selectPersonFirst: "Veuillez d'abord sélectionner une personne en haut",
+    selectThisPersonFirst: "Veuillez sélectionner cette personne pour modifier son statut",
+    dataNotFound: "Aucune donnée trouvée", errorLoading: "Erreur lors du chargement des données",
+    addedMessage: "a été ajouté(e)", updatedMessage: "a été mis(e) à jour",
+    enterNameWarning: "Veuillez saisir un nom", selectGroupWarning: "Veuillez sélectionner un groupe",
+    saveError: "Erreur lors de l'enregistrement. Veuillez réessayer.",
+    pastEditDisabled: "La modification des semaines passées est désactivée par l'administrateur.",
+    pastLimitExceeded: "Vous ne pouvez modifier que jusqu'à {limit} paires de semaines passées.",
+    groupPlaceholder: "Aucun groupe", adminPanel: "Admin",
+    faqBtnText: "Aide", faqTitle: "Aide & FAQ", faqSearchPlaceholder: "Rechercher des questions ou sujets",
+    faqNoResults: "Aucune entrée de FAQ correspondante trouvée.", faqClose: "Fermer",
+    demoTag: "Démo", resetDemo: "Réinitialiser", demoReset: "Démo réinitialisée",
+    demoHint: "Démo : équipe d'exemple aux noms fictifs. Les modifications restent dans ce navigateur."
+  },
+  it: {
+    kw: "Sett", now: "attuale", thisPeriod: "Periodo attuale", name: "Nome",
+    choosePerson: "Seleziona persona", addPersonBtn: "Aggiungi", editPersonBtn: "Modifica",
+    greenTooltip: "Tutto sta andando bene! Sono motivato(a) e ho spazio nel mio programma. Sentiti libero(a) di contattarmi se hai bisogno di supporto.",
+    yellowTooltip: "Sono occupato(a) ma ho tutto sotto controllo. Devo concentrarmi sui miei compiti attuali, quindi coordiniamoci prima di assegnarmene di nuovi.",
+    orangeTooltip: "Sento la pressione. Sto gestendo troppi argomenti e devo dare priorità rigorosa. Probabilmente dovrò delegare o chiedere aiuto a breve.",
+    redTooltip: "Sono al limite o completamente bloccato(a). Non può continuare così. Ho bisogno che qualcuno intervenga subito per ridistribuire il lavoro.",
+    greenLabel: "Verde", yellowLabel: "Giallo", orangeLabel: "Arancione", redLabel: "Rosso",
+    overload: "Sovraccarico:",
+    addTitle: "Aggiungi persona", addName: "Nome", addGroup: "Gruppo",
+    btnCancel: "Annulla", btnAdd: "Aggiungi", editTitle: "Modifica persona", btnSave: "Salva",
+    statusSuper: "Super", statusOk: "OK", statusFull: "Pieno, niente nuovi compiti", statusOverload: "Sovraccarico",
+    clickToSet: "Clicca per impostare", selectToEdit: "Seleziona una persona per modificare",
+    selectPersonFirst: "Seleziona prima una persona in alto",
+    selectThisPersonFirst: "Seleziona questa persona per modificare lo stato",
+    dataNotFound: "Nessun dato trovato", errorLoading: "Errore nel caricamento dei dati",
+    addedMessage: "è stato aggiunto", updatedMessage: "è stato aggiornato",
+    enterNameWarning: "Inserisci un nome", selectGroupWarning: "Seleziona un gruppo",
+    saveError: "Errore durante il salvataggio. Riprova.",
+    pastEditDisabled: "La modifica delle settimane passate è disabilitata dalle impostazioni admin.",
+    pastLimitExceeded: "Puoi modificare solo fino a {limit} coppie di settimane passate.",
+    groupPlaceholder: "Nessun gruppo", adminPanel: "Admin",
+    faqBtnText: "Aiuto", faqTitle: "Aiuto & FAQ", faqSearchPlaceholder: "Cerca domande o argomenti",
+    faqNoResults: "Nessuna voce FAQ corrispondente trovata.", faqClose: "Chiudi",
+    demoTag: "Demo", resetDemo: "Reimposta", demoReset: "Demo reimpostata",
+    demoHint: "Demo: team di esempio con nomi fittizi. Le modifiche restano in questo browser."
+  }
+};
+
+// ========= settings and mode =========
+const DEMO_SETTINGS_KEY = 'marauder-demo-settings';
+const DEMO_DATA_KEY = 'marauder-demo-data';
+let settings = { language: 'en', allowPastChanges: true, pastWeeksLimit: 8, futurePeriods: 1 };
+let DEMO = false;
+
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+
+// The server answers api/settings with JSON. A static host (GitHub Pages) does not, so the page runs as a demo.
+async function loadSettings() {
+  try {
+    const res = await fetch('api/settings', { cache: 'no-store' });
+    if (res.ok && (res.headers.get('content-type') || '').includes('json')) {
+      settings = { ...settings, ...(await res.json()) };
+      return;
+    }
+  } catch {}
+  DEMO = true;
+  settings = { ...settings, ...(store.get(DEMO_SETTINGS_KEY) || {}) };
+  const lang = new URLSearchParams(location.search).get('lang');
+  if (translations[lang]) settings.language = lang;
+}
+
+const t = () => translations[settings.language] || translations.de;
+const statusName = s => ({ green: t().statusSuper, yellow: t().statusOk, orange: t().statusFull, red: t().statusOverload })[s];
+const statusLabel = s => ({ green: t().greenLabel, yellow: t().yellowLabel, orange: t().orangeLabel, red: t().redLabel })[s];
+const statusTip = s => ({ green: t().greenTooltip, yellow: t().yellowTooltip, orange: t().orangeTooltip, red: t().redTooltip })[s];
+
+function applyTranslations() {
+  const tr = t();
+  document.documentElement.lang = settings.language;
+  $$('[data-t]').forEach(el => { el.textContent = tr[el.dataset.t]; });
+  $('#addUserBtn').textContent = tr.addPersonBtn;
+  $('#editUserBtn').textContent = tr.editPersonBtn;
+  $('#faqBtn').textContent = tr.faqBtnText;
+  $('#adminBtn').textContent = tr.adminPanel;
+  $('#faqSearch').placeholder = tr.faqSearchPlaceholder;
+  $('#adminBtn').href = DEMO ? 'admin.html' : '/admin';
+  if (DEMO) {
+    $('#demoTag').hidden = false;
+    $('#demoTag').textContent = tr.demoTag;
+    $('#demoTag').title = tr.demoHint;
+    $('#resetBtn').hidden = false;
+    $('#resetBtn').textContent = tr.resetDemo;
+  }
+}
+
+// ========= CSV =========
+// Handles quoted fields with commas and escaped quotes (the FAQ answers need this).
+function parseCsv(txt) {
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < txt.length; i++) {
+    const c = txt[i];
+    if (q) {
+      if (c === '"') { if (txt[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && txt[i + 1] === '\n') i++;
+      row.push(f); rows.push(row); row = []; f = '';
+    } else f += c;
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(v => v.trim() !== ''));
+}
+
+// ========= periods =========
+const isoWeek = d => { const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const n = (x.getUTCDay() + 6) % 7; x.setUTCDate(x.getUTCDate() - n + 3); const f = new Date(Date.UTC(x.getUTCFullYear(), 0, 4)); return 1 + Math.round((x - f) / 604800000); };
+const now = new Date();
+const w = isoWeek(now);
+const start = w % 2 ? w : w - 1;
+const currentKey = `weeks${start}-${start + 1}`;
+
+// Week pairs in chronological order, oldest first: 8 back including the current one, plus the future ones.
+function buildPeriods(future) {
+  const year = now.getFullYear();
+  const out = [];
+  const first = start + future * 2;
+  for (let i = 0; i < 8 + future; i++) {
+    let wk = first - i * 2, yr = year;
+    while (wk < 1) { yr--; wk += 52; }
+    while (wk > 52) { wk -= 52; yr++; }
+    out.push({
+      key: `weeks${wk}-${wk + 1}`, label: `${wk}–${wk + 1}`, year: yr, start: wk,
+      isCurrent: wk === start && yr === year,
+      isFuture: yr > year || (yr === year && wk > start)
+    });
+  }
+  out.sort((a, b) => a.year - b.year || a.start - b.start);
+  out.forEach((p, i) => { p.isYearBoundary = i > 0 && out[i - 1].year !== p.year; });
+  return out;
+}
+
+// Server columns come as weeks31-32 or Week_2025-W31_2025-07-28; both map to the week-pair key.
+function normalizeWeekKey(col) {
+  if (!col) return null;
+  if (col.startsWith('weeks')) return col;
+  const m = col.match(/^Week_(\d{4})-W(\d+)_/);
+  if (m) { const wk = +m[2]; const s = wk % 2 ? wk : wk - 1; return `weeks${s}-${s + 1}`; }
+  return col;
+}
+
+// ========= state =========
+let users = [], statuses = {}, groups = [], periods = [], currentUserId = null, lastCsv = '';
+
+// Deterministic sample statuses for the demo: each person drifts slowly between neighbouring states.
+function seeded(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return () => { h += 0x6D2B79F5; let x = h; x = Math.imul(x ^ x >>> 15, x | 1); x ^= x + Math.imul(x ^ x >>> 7, x | 61); return ((x ^ x >>> 14) >>> 0) / 4294967296; };
+}
+function demoStatuses(user) {
+  const rnd = seeded(user.id + user.name);
+  const r0 = rnd();
+  let s = r0 < .42 ? 0 : r0 < .78 ? 1 : r0 < .94 ? 2 : 3;
+  const map = {};
+  for (const p of periods) {
+    if (p.isFuture) break;
+    const r = rnd();
+    if (r < .24) s = Math.max(0, s - 1); else if (r > .86) s = Math.min(3, s + 1);
+    map[p.key] = STATUS[s];
+  }
+  return map;
+}
+
+async function loadData() {
+  try {
+    const res = await fetch('users.csv', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const txt = await res.text();
+    if (txt === lastCsv) return false;
+    lastCsv = txt;
+
+    const rows = parseCsv(txt);
+    if (rows.length < 2) { flash(t().dataNotFound); return false; }
+    const headers = rows[0].map(h => h.trim());
+
+    users = []; statuses = {};
+    for (const r of rows.slice(1)) {
+      if (!r[0]?.trim()) continue;
+      const u = { id: r[0].trim(), group: (r[1] || '').trim(), name: (r[2] || '').trim() };
+      users.push(u);
+      const map = {};
+      for (let j = 3; j < Math.min(r.length, headers.length); j++) {
+        const key = normalizeWeekKey(headers[j]);
+        const color = FROM_CODE[(r[j] || '').trim()];
+        if (key && color) map[key] = color;
+      }
+      statuses[u.id] = map;
+    }
+
+    periods = buildPeriods(Number.isFinite(+settings.futurePeriods) ? +settings.futurePeriods : 1);
+
+    if (DEMO) {
+      const saved = store.get(DEMO_DATA_KEY);
+      if (saved?.users?.length) { users = saved.users; statuses = saved.statuses || {}; }
+      else users.forEach(u => { statuses[u.id] = demoStatuses(u); });
+    }
+
+    // A new period starts with each person's last status, so nobody has to re-enter it every week.
+    let copied = false;
+    for (const id in statuses) {
+      const m = statuses[id];
+      for (let i = 1; i < periods.length; i++) {
+        if (!m[periods[i].key] && m[periods[i - 1].key]) { m[periods[i].key] = m[periods[i - 1].key]; copied = true; }
+      }
+    }
+    if (copied && !DEMO) setTimeout(saveCsv, 500);
+
+    refreshGroups();
+    return true;
+  } catch (err) {
+    console.error('Error loading data:', err);
+    flash(t().errorLoading);
+    return false;
+  }
+}
+
+function refreshGroups() {
+  groups = [...new Set(users.map(u => u.group).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+  const opts = groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('') || `<option value="">${t().groupPlaceholder}</option>`;
+  $('#newGroup').innerHTML = opts;
+  $('#editGroup').innerHTML = opts;
+}
+
+let saveInProgress = false, pendingSave = false;
+async function saveCsv() {
+  if (DEMO) { store.set(DEMO_DATA_KEY, { users, statuses }); return; }
+  if (saveInProgress) { pendingSave = true; return; }
+  saveInProgress = true;
+  try {
+    const set = new Set(periods.map(p => p.key));
+    Object.values(statuses).forEach(m => Object.keys(m).forEach(k => set.add(k)));
+    const ordered = [...set].sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]));
+    const rows = [['id', 'group', 'name', ...ordered]];
+    for (const u of users) rows.push([u.id, u.group, u.name, ...ordered.map(k => TO_CODE[statuses[u.id]?.[k]] || '')]);
+    const res = await fetch('save-csv', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvData: rows }), signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+  } catch (err) {
+    console.error('Failed to save CSV:', err);
+    flash(t().saveError);
+  } finally {
+    saveInProgress = false;
+    if (pendingSave) { pendingSave = false; setTimeout(saveCsv, 100); }
+  }
+}
+
+// ========= render =========
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+const byName = (a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+
+function renderSelect() {
+  const sel = $('#userSelect');
+  sel.innerHTML = `<option value="">${esc(t().choosePerson)}</option>` +
+    [...users].sort(byName).map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+  if (!users.some(u => u.id === currentUserId)) currentUserId = null;
+  sel.value = currentUserId || '';
+  $('#editUserBtn').disabled = !currentUserId;
+}
+
+function renderSummary() {
+  const tr = t();
+  const count = { green: 0, yellow: 0, orange: 0, red: 0 };
+  const red = [];
+  for (const u of users) {
+    const s = statuses[u.id]?.[currentKey];
+    if (s) count[s]++;
+    if (s === 'red') red.push(u.name);
+  }
+  const total = users.length || 1;
+  const cur = periods.find(p => p.isCurrent);
+  $('#figs').innerHTML =
+    `<div class="lead"><p class="mono">${esc(tr.thisPeriod)}</p><p class="mono" style="color:var(--ink-2)">${esc(tr.kw)} ${cur ? cur.label : ''}</p></div>` +
+    STATUS.map(s => `<div class="fig" tabindex="0" data-tip="${esc(statusTip(s))}"><i class="g ${s}"></i><b>${count[s]}</b><div><span>${esc(statusLabel(s))} · ${esc(statusName(s))}</span><small>${Math.round(count[s] / total * 100)}%</small></div></div>`).join('');
+  $('#bar').innerHTML = STATUS.map(s => `<i class="${s}" style="width:${count[s] / total * 100}%"></i>`).join('');
+  const ov = $('#overload');
+  ov.hidden = !red.length;
+  ov.innerHTML = red.length ? `<strong>${esc(tr.overload)}</strong> ${esc(red.join(', '))}` : '';
+}
+
+function renderGrid() {
+  const tr = t();
+  const grid = $('#grid');
+  grid.style.setProperty('--n', periods.length);
+  let html = `<div class="c h name">${esc(tr.name)}</div>`;
+  periods.forEach((p, i) => {
+    const small = p.isCurrent ? tr.now : (i === 0 || p.isYearBoundary) ? p.year : '';
+    html += `<div class="c h${p.isCurrent ? ' cur' : ''}${p.isYearBoundary ? ' yb' : ''}"><small>${esc(small)}</small>${p.label}</div>`;
+  });
+
+  const byGroup = new Map();
+  for (const u of users) { if (!byGroup.has(u.group)) byGroup.set(u.group, []); byGroup.get(u.group).push(u); }
+  const ordered = [...byGroup.keys()].sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+
+  for (const g of ordered) {
+    html += `<div class="c grp">${esc(g || '—')}</div><div class="c grp-fill" style="grid-column:2 / -1"></div>`;
+    for (const u of byGroup.get(g).sort(byName)) {
+      const sel = u.id === currentUserId;
+      html += `<div class="c name${sel ? ' sel' : ''}" data-user-id="${esc(u.id)}" title="${esc(u.name)}">${esc(u.name)}</div>`;
+      for (const p of periods) {
+        const s = statuses[u.id]?.[p.key];
+        const tip = s ? `${u.name} · ${p.label}: ${statusName(s)}` : (sel ? tr.clickToSet : tr.selectToEdit);
+        html += `<div class="c${p.isCurrent ? ' now' : ''}${p.isYearBoundary ? ' yb' : ''}${sel ? ' sel' : ''}">` +
+          `<button class="cell${sel ? ' edit' : ''}" type="button" data-user-id="${esc(u.id)}" data-key="${p.key}" title="${esc(tip)}" aria-label="${esc(tip)}"><i class="g ${s || 'unset'}"></i></button></div>`;
+      }
+    }
+  }
+  grid.innerHTML = users.length ? html : `<p class="empty">${esc(tr.dataNotFound)}</p>`;
+  grid.setAttribute('aria-busy', 'false');
+  renderSummary();
+}
+
+function flash(msg) {
+  const n = $('#notify');
+  n.textContent = msg;
+  n.classList.add('show');
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => n.classList.remove('show'), 2600);
+}
+
+// ========= interactions =========
+$('#grid').addEventListener('click', e => {
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  const tr = t();
+  if (!cell.classList.contains('edit')) { flash(currentUserId ? tr.selectThisPersonFirst : tr.selectPersonFirst); return; }
+
+  const uid = cell.dataset.userId, key = cell.dataset.key;
+  const per = periods.find(p => p.key === key);
+  const isPast = per && !per.isCurrent && !per.isFuture;
+  if (isPast) {
+    if (settings.allowPastChanges === false) { flash(tr.pastEditDisabled); return; }
+    const limit = parseInt(settings.pastWeeksLimit);
+    if (settings.pastWeeksLimit !== null && settings.pastWeeksLimit !== undefined && limit >= 0) {
+      const diff = periods.findIndex(p => p.isCurrent) - periods.indexOf(per);
+      if (diff > limit) { flash(tr.pastLimitExceeded.replace('{limit}', limit)); return; }
+    }
+  }
+
+  // Green → Yellow → Orange → Red → Green
+  const cur = statuses[uid]?.[key];
+  const next = STATUS[(STATUS.indexOf(cur) + 1) % STATUS.length];
+  statuses[uid] = statuses[uid] || {};
+  statuses[uid][key] = next;
+  cell.querySelector('.g').className = 'g ' + next;
+  const u = users.find(x => x.id === uid);
+  cell.title = cell.ariaLabel = `${u?.name} · ${per?.label}: ${statusName(next)}`;
+  renderSummary();
+  saveCsv();
+});
+
+$('#userSelect').addEventListener('change', e => {
+  currentUserId = e.target.value || null;
+  $('#editUserBtn').disabled = !currentUserId;
+  renderGrid();
+  const row = $(`.c.name[data-user-id="${CSS.escape(currentUserId || '')}"]`);
+  if (row) row.scrollIntoView({ block: 'center', inline: 'nearest' });
+});
+
+$$('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+
+$('#addUserBtn').addEventListener('click', () => { $('#newName').value = ''; $('#addModal').showModal(); });
+$('#addSave').addEventListener('click', () => {
+  const tr = t();
+  const name = $('#newName').value.trim(), group = $('#newGroup').value;
+  if (!name) { flash(tr.enterNameWarning); return; }
+  if (!group) { flash(tr.selectGroupWarning); return; }
+  const u = { id: String(Date.now()), name, group };
+  users.push(u); statuses[u.id] = {};
+  currentUserId = u.id;
+  renderSelect(); renderGrid(); saveCsv();
+  $('#addModal').close();
+  flash(`${name} ${tr.addedMessage}`);
+});
+
+$('#editUserBtn').addEventListener('click', () => {
+  const u = users.find(x => x.id === currentUserId); if (!u) return;
+  $('#editName').value = u.name; $('#editGroup').value = u.group;
+  $('#editModal').showModal();
+});
+$('#editSave').addEventListener('click', () => {
+  const u = users.find(x => x.id === currentUserId); if (!u) return;
+  const name = $('#editName').value.trim();
+  if (!name) { flash(t().enterNameWarning); return; }
+  u.name = name; u.group = $('#editGroup').value;
+  renderSelect(); renderGrid(); saveCsv();
+  $('#editModal').close();
+  flash(`${u.name} ${t().updatedMessage}`);
+});
+
+$('#resetBtn').addEventListener('click', async () => {
+  store.del(DEMO_DATA_KEY); lastCsv = '';
+  await loadData(); renderSelect(); renderGrid();
+  flash(t().demoReset);
+});
+
+// ========= FAQ =========
+let faqs = [];
+async function loadFAQs() {
+  try {
+    if (!DEMO) {
+      const res = await fetch('api/faq');
+      if (res.ok) { faqs = await res.json(); return; }
+    }
+    const res = await fetch('ampel_faq.csv');
+    if (res.ok) faqs = parseCsv(await res.text()).slice(1).filter(r => r.length >= 2).map(r => ({ question: r[0].trim(), answer: r[1].trim() }));
+  } catch (err) { console.error('Failed to load FAQs:', err); }
+}
+function renderFAQs(filter = '') {
+  const q = filter.toLowerCase().trim();
+  const list = faqs.filter(f => f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q));
+  $('#faqList').innerHTML = list.length
+    ? list.map(f => `<div class="qa"><h3>${esc(f.question)}</h3><p>${esc(f.answer)}</p></div>`).join('')
+    : `<p class="empty" style="padding:28px 0">${esc(t().faqNoResults)}</p>`;
+}
+$('#faqBtn').addEventListener('click', () => { $('#faqSearch').value = ''; renderFAQs(); $('#faqModal').showModal(); });
+$('#faqSearch').addEventListener('input', e => renderFAQs(e.target.value));
+
+// ========= init =========
+await loadSettings();
+applyTranslations();
+$('#badge').textContent = `${t().kw} ${w}`;
+await loadData();
+await loadFAQs();
+renderSelect();
+renderGrid();
+// Start with the current period in view; on narrow screens it would otherwise be off to the right.
+$('#board').scrollLeft = $('#board').scrollWidth;
+
+if (!DEMO) setInterval(async () => { if (document.hidden) return; if (await loadData()) { renderSelect(); renderGrid(); } }, 30000);
+</script>
+</body>
+</html>
